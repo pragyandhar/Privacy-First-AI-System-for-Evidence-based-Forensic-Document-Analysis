@@ -33,3 +33,149 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+class NeuraVaultIngestor:
+    """
+    Manages the ingestion of documents into the NeuraVault vector store.
+    
+    Attributes:
+        data_dir (Path): Directory containing PDF documents
+        vector_db_dir (Path): Directory for persistent vector database storage
+        chunk_size (int): Size of text chunks for splitting
+        chunk_overlap (int): Overlap between consecutive chunks
+        model_name (str): Hugging Face embedding model identifier
+    """
+    
+    def __init__(
+        self,
+        data_dir: str = "data",
+        vector_db_dir: str = "vector_db",
+        chunk_size: int = 500,
+        chunk_overlap: int = 50,
+        model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
+    ):
+        """
+        Initialize the NeuraVault Ingestor.
+        
+        Args:
+            data_dir: Path to directory containing PDF files
+            vector_db_dir: Path to vector database directory
+            chunk_size: Number of characters per chunk
+            chunk_overlap: Number of overlapping characters between chunks
+            model_name: Hugging Face embedding model name
+        """
+        self.data_dir = Path(data_dir)
+        self.vector_db_dir = Path(vector_db_dir)
+        self.chunk_size = chunk_size
+        self.chunk_overlap = chunk_overlap
+        self.model_name = model_name
+        
+        # Ensure directories exist
+        self.data_dir.mkdir(parents=True, exist_ok=True)
+        self.vector_db_dir.mkdir(parents=True, exist_ok=True)
+        
+        logger.info(f"Initialized NeuraVaultIngestor with data_dir={data_dir}")
+    
+    def load_pdf_documents(self) -> List[Tuple[str, str]]:
+        """
+        Load all PDF documents from the data directory.
+        
+        Returns:
+            List of tuples containing (filename, text content)
+            
+        Raises:
+            FileNotFoundError: If no PDF files are found in the data directory
+        """
+        pdf_files = list(self.data_dir.glob("*.pdf"))
+        
+        if not pdf_files:
+            logger.warning(f"No PDF files found in {self.data_dir}")
+            raise FileNotFoundError(
+                f"No PDF documents found in '{self.data_dir}'. "
+                "Please add PDF files to the data/ directory."
+            )
+        
+        documents = []
+        logger.info(f"Found {len(pdf_files)} PDF file(s). Starting extraction...")
+        
+        for pdf_path in pdf_files:
+            try:
+                logger.info(f"Processing: {pdf_path.name}")
+                reader = PdfReader(pdf_path)
+                text = ""
+                
+                for page_num, page in enumerate(reader.pages, 1):
+                    page_text = page.extract_text()
+                    if page_text:
+                        text += f"\n--- Page {page_num} ---\n{page_text}"
+                
+                if text.strip():
+                    documents.append((pdf_path.name, text))
+                    logger.info(f"Extracted {len(reader.pages)} pages from {pdf_path.name}")
+                else:
+                    logger.warning(f"No text extracted from {pdf_path.name}")
+                    
+            except Exception as e:
+                logger.error(f"Error processing {pdf_path.name}: {str(e)}")
+                raise
+        
+        logger.info(f"Successfully loaded {len(documents)} document(s)")
+        return documents
+    
+    def clean_text(self, text: str) -> str:
+        """
+        Clean extracted text to remove noise and redundancy.
+        
+        Args:
+            text: Raw extracted text from PDF
+            
+        Returns:
+            Cleaned text with reduced noise
+        """
+        # Remove multiple consecutive whitespaces
+        import re
+        text = re.sub(r'\s+', ' ', text)
+        
+        # Remove common headers/footers patterns
+        text = re.sub(r'Page \d+', '', text)
+        text = re.sub(r'^\d+\s*$', '', text, flags=re.MULTILINE)
+        
+        # Remove excessive special characters while preserving readability
+        text = re.sub(r'[^\w\s\.\,\!\?\-\:\;\(\)\/\&]', '', text)
+        
+        # Strip leading/trailing whitespace
+        text = text.strip()
+        
+        return text
+    
+    def create_documents_with_metadata(
+        self, 
+        documents: List[Tuple[str, str]]
+    ) -> List[Document]:
+        """
+        Create LangChain Document objects with metadata.
+        
+        Args:
+            documents: List of (filename, text) tuples
+            
+        Returns:
+            List of LangChain Document objects with metadata
+        """
+        doc_objects = []
+        
+        for filename, text in documents:
+            # Clean the text
+            cleaned_text = self.clean_text(text)
+            
+            # Create document with metadata
+            doc = Document(
+                page_content=cleaned_text,
+                metadata={
+                    "source": filename,
+                    "document_type": "pdf"
+                }
+            )
+            doc_objects.append(doc)
+        
+        logger.info(f"Created {len(doc_objects)} Document object(s) with metadata")
+        return doc_objects

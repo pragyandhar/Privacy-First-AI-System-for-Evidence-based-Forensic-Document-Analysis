@@ -119,3 +119,39 @@ class NeuraVaultRAGEngine:
         except Exception as e:
             logger.error(f"Failed to load vector store: {str(e)}", exc_info=True)
             raise
+
+    def initialize_llm(self) -> ChatOllama:
+        """
+        Initialize the Ollama LLM connection.
+        
+        Returns:
+            Initialized ChatOllama instance
+            
+        Raises:
+            Exception: If Ollama connection fails
+        """
+        try:
+            logger.info(f"Initializing ChatOllama with model: {self.model_name}")
+            
+            llm = ChatOllama(
+                model=self.model_name,
+                temperature=self.temperature
+            )
+            
+            # Test connection
+            logger.info("Testing Ollama connection...")
+            # Attempt a simple call to verify connection
+            _ = llm.invoke("Test connection")
+            
+            self.llm = llm
+            logger.info(f"Successfully connected to Ollama model: {self.model_name}")
+            return llm
+            
+        except Exception as e:
+            logger.error(
+                f"Failed to connect to Ollama. "
+                f"Ensure Ollama is running and model '{self.model_name}' is pulled. "
+                f"Error: {str(e)}",
+                exc_info=True
+            )
+            raise

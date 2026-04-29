@@ -7,16 +7,30 @@ import {
     fetchHealth,
     uploadFiles,
     ingestDocuments,
+    queryExplainableStream,
     type QueryResponse,
     type StarterQuestion,
+    type SourceInfo,
+    type ChatMessageExport,
 } from "@/lib/api";
 import MessageBubble, { type ChatMessage } from "@/components/MessageBubble";
 import StarterQuestions from "@/components/StarterQuestions";
 import Sidebar from "@/components/Sidebar";
-import { useAuth } from "@/components/AuthContext";
-import { Send, Upload, Menu, LogOut } from "lucide-react";
+import TimelinePanel from "@/components/TimelinePanel";
+import AnomalyPanel from "@/components/AnomalyPanel";
+import ExportMenu from "@/components/ExportMenu";
+import EvidenceGraphPanel from "@/components/EvidenceGraphPanel";
+import PromptTemplatesPanel from "@/components/PromptTemplatesPanel";
+import AnalyticsPanel from "@/components/AnalyticsPanel";
+import { Send, Upload, Menu, Download, Brain, LogOut, Shield } from "lucide-react";
+import { type AuthUser } from "@/lib/api";
 
-export default function ChatWindow() {
+interface ChatWindowProps {
+    user: AuthUser;
+    onLogout: () => void;
+}
+
+export default function ChatWindow({ user, onLogout }: ChatWindowProps) {
     /* ---- state ------------------------------------------------------------ */
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [input, setInput] = useState("");
@@ -25,7 +39,18 @@ export default function ChatWindow() {
     const [engineReady, setEngineReady] = useState<boolean | null>(null);
     const [sidebarOpen, setSidebarOpen] = useState(false);
 
-    const { username, role, logout } = useAuth();
+    // Feature panel states
+    const [timelineOpen, setTimelineOpen] = useState(false);
+    const [anomalyOpen, setAnomalyOpen] = useState(false);
+    const [exportOpen, setExportOpen] = useState(false);
+    const [evidenceOpen, setEvidenceOpen] = useState(false);
+    const [templatesOpen, setTemplatesOpen] = useState(false);
+    const [analyticsOpen, setAnalyticsOpen] = useState(false);
+
+    // Explainable AI / prompt template state
+    const [explainMode, setExplainMode] = useState(false);
+    const [activeTemplateId, setActiveTemplateId] = useState<string | null>(null);
+
     const bottomRef = useRef<HTMLDivElement>(null);
     const fileRef = useRef<HTMLInputElement>(null);
 
@@ -55,13 +80,76 @@ export default function ChatWindow() {
             setLoading(true);
 
             try {
-                const res: QueryResponse = await queryRAG(question);
-                const assistantMsg: ChatMessage = {
-                    role: "assistant",
-                    content: res.answer,
-                    sources: res.sources,
-                };
-                setMessages((prev) => [...prev, assistantMsg]);
+                if (explainMode) {
+                    // Streaming explainable AI mode
+                    let streamedContent = "";
+                    let sources: SourceInfo[] = [];
+
+                    // Add a placeholder message that we'll update
+                    const placeholderIdx = messages.length + 1; // +1 for user msg
+                    setMessages((prev) => [
+                        ...prev,
+                        { role: "assistant", content: "**REASONING STEPS:**\n", sources: [] },
+                    ]);
+
+                    await queryExplainableStream(
+                        question,
+                        activeTemplateId ?? undefined,
+                        (token) => {
+                            streamedContent += token;
+                            setMessages((prev) => {
+                                const updated = [...prev];
+                                const lastIdx = updated.length - 1;
+                                if (lastIdx >= 0 && updated[lastIdx].role === "assistant") {
+                                    updated[lastIdx] = {
+                                        ...updated[lastIdx],
+                                        content: streamedContent,
+                                    };
+                                }
+                                return updated;
+                            });
+                        },
+                        (srcs) => {
+                            sources = srcs;
+                        },
+                        () => {
+                            // Done - update sources
+                            setMessages((prev) => {
+                                const updated = [...prev];
+                                const lastIdx = updated.length - 1;
+                                if (lastIdx >= 0 && updated[lastIdx].role === "assistant") {
+                                    updated[lastIdx] = {
+                                        ...updated[lastIdx],
+                                        sources: sources,
+                                    };
+                                }
+                                return updated;
+                            });
+                        },
+                        (error) => {
+                            setMessages((prev) => {
+                                const updated = [...prev];
+                                const lastIdx = updated.length - 1;
+                                if (lastIdx >= 0) {
+                                    updated[lastIdx] = {
+                                        role: "assistant",
+                                        content: `**Error:** ${error}`,
+                                    };
+                                }
+                                return updated;
+                            });
+                        }
+                    );
+                } else {
+                    // Standard query mode
+                    const res: QueryResponse = await queryRAG(question);
+                    const assistantMsg: ChatMessage = {
+                        role: "assistant",
+                        content: res.answer,
+                        sources: res.sources,
+                    };
+                    setMessages((prev) => [...prev, assistantMsg]);
+                }
             } catch (err: any) {
                 const errMsg: ChatMessage = {
                     role: "assistant",
@@ -72,7 +160,7 @@ export default function ChatWindow() {
                 setLoading(false);
             }
         },
-        [input, loading]
+        [input, loading, explainMode, activeTemplateId]
     );
 
     const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -114,11 +202,28 @@ export default function ChatWindow() {
         }
     };
 
+    // Prepare messages for export
+    const exportMessages: ChatMessageExport[] = messages.map((m) => ({
+        role: m.role,
+        content: m.content,
+        sources: m.sources,
+    }));
+
     /* ---- render ----------------------------------------------------------- */
     return (
         <div className="flex w-full h-full">
             {/* Sidebar */}
-            <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} engineReady={engineReady} onEngineReady={() => setEngineReady(true)} />
+            <Sidebar
+                open={sidebarOpen}
+                onClose={() => setSidebarOpen(false)}
+                engineReady={engineReady}
+                onEngineReady={() => setEngineReady(true)}
+                onOpenTimeline={() => { setTimelineOpen(true); setSidebarOpen(false); }}
+                onOpenAnomalies={() => { setAnomalyOpen(true); setSidebarOpen(false); }}
+                onOpenEvidenceGraph={() => { setEvidenceOpen(true); setSidebarOpen(false); }}
+                onOpenTemplates={() => { setTemplatesOpen(true); setSidebarOpen(false); }}
+                onOpenAnalytics={() => { setAnalyticsOpen(true); setSidebarOpen(false); }}
+            />
 
             <div className="flex flex-col flex-1 h-full">
                 {/* Header */}
@@ -140,7 +245,42 @@ export default function ChatWindow() {
                             </p>
                         </div>
                     </div>
+
+                    {/* Header action buttons */}
                     <div className="ml-auto flex items-center gap-2">
+                        {/* User badge */}
+                        <span className="hidden sm:flex items-center gap-1.5 text-xs text-[var(--muted)] px-2 py-1 rounded-lg bg-[var(--background)]">
+                            <Shield size={12} className="text-brand-400" />
+                            {user.username}
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-brand-600/20 text-brand-300">
+                                {user.role}
+                            </span>
+                        </span>
+                        {/* Explain mode toggle */}
+                        <button
+                            onClick={() => setExplainMode((v) => !v)}
+                            title={explainMode ? "Explainable AI ON (streaming)" : "Enable Explainable AI"}
+                            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${explainMode
+                                ? "bg-purple-600/30 text-purple-300 border border-purple-500/40"
+                                : "bg-[var(--card-hover)] text-[var(--muted)] hover:text-white"
+                                }`}
+                        >
+                            <Brain size={14} />
+                            {explainMode ? "Explain ON" : "Explain"}
+                        </button>
+
+                        {/* Export button */}
+                        <button
+                            onClick={() => setExportOpen(true)}
+                            disabled={messages.length === 0}
+                            title="Export chat"
+                            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-[var(--card-hover)] text-[var(--muted)] hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        >
+                            <Download size={14} />
+                            Export
+                        </button>
+
+                        {/* Engine status */}
                         {engineReady !== null && (
                             <span
                                 className={`text-xs px-2 py-0.5 rounded-full ${engineReady
@@ -151,15 +291,12 @@ export default function ChatWindow() {
                                 {engineReady ? "Engine Ready" : "Engine Not Ready"}
                             </span>
                         )}
-                        {username && (
-                            <span className="text-xs text-[var(--muted)] hidden sm:inline">
-                                {username}{role === "admin" ? " (admin)" : ""}
-                            </span>
-                        )}
+
+                        {/* Logout button */}
                         <button
-                            onClick={logout}
+                            onClick={onLogout}
                             title="Sign out"
-                            className="p-1.5 rounded-lg hover:bg-[var(--card-hover)] transition-colors text-[var(--muted)] hover:text-red-400"
+                            className="p-1.5 rounded-lg hover:bg-red-600/20 text-[var(--muted)] hover:text-red-400 transition-colors"
                         >
                             <LogOut size={16} />
                         </button>
@@ -212,6 +349,19 @@ export default function ChatWindow() {
 
                 {/* Input bar */}
                 <div className="border-t border-[var(--border)] bg-[var(--card)] px-4 py-3">
+                    {/* Active template indicator */}
+                    {activeTemplateId && (
+                        <div className="flex items-center gap-2 mb-2 max-w-3xl mx-auto text-xs text-purple-300">
+                            <span className="w-2 h-2 rounded-full bg-purple-500" />
+                            Using custom prompt template
+                            <button
+                                onClick={() => setActiveTemplateId(null)}
+                                className="ml-auto text-[10px] px-2 py-0.5 rounded bg-purple-800/50 hover:bg-purple-700/50"
+                            >
+                                Clear
+                            </button>
+                        </div>
+                    )}
                     <form
                         onSubmit={(e) => {
                             e.preventDefault();
@@ -242,7 +392,7 @@ export default function ChatWindow() {
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             onKeyDown={handleKeyDown}
-                            placeholder="Ask a question about your documents…"
+                            placeholder={explainMode ? "Ask with reasoning steps…" : "Ask a question about your documents…"}
                             className="flex-1 resize-none rounded-xl bg-[var(--background)] border border-[var(--border)] px-4 py-2.5 text-sm placeholder:text-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-brand-500/50"
                             style={{ maxHeight: 160 }}
                         />
@@ -257,9 +407,23 @@ export default function ChatWindow() {
                     </form>
                     <p className="text-center text-[10px] text-[var(--muted)] mt-2">
                         100 % offline · All data stays on your machine
+                        {explainMode && " · Explainable AI enabled"}
                     </p>
                 </div>
             </div>
+
+            {/* Feature Panels */}
+            <TimelinePanel open={timelineOpen} onClose={() => setTimelineOpen(false)} />
+            <AnomalyPanel open={anomalyOpen} onClose={() => setAnomalyOpen(false)} />
+            <ExportMenu open={exportOpen} onClose={() => setExportOpen(false)} messages={exportMessages} />
+            <EvidenceGraphPanel open={evidenceOpen} onClose={() => setEvidenceOpen(false)} />
+            <PromptTemplatesPanel
+                open={templatesOpen}
+                onClose={() => setTemplatesOpen(false)}
+                activeTemplateId={activeTemplateId}
+                onSelectTemplate={setActiveTemplateId}
+            />
+            <AnalyticsPanel open={analyticsOpen} onClose={() => setAnalyticsOpen(false)} />
         </div>
     );
 }

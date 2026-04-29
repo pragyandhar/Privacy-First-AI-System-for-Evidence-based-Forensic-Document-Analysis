@@ -12,6 +12,11 @@ import {
     AlertCircle,
     File,
     Loader2,
+    Clock,
+    ShieldAlert,
+    Network,
+    FileCode2,
+    BarChart3,
 } from "lucide-react";
 import {
     uploadFiles,
@@ -25,10 +30,15 @@ interface Props {
     open: boolean;
     onClose: () => void;
     engineReady: boolean | null;
-    onEngineReady: () => void;          // notify parent that engine is now ready
+    onEngineReady: () => void;
+    onOpenTimeline: () => void;
+    onOpenAnomalies: () => void;
+    onOpenEvidenceGraph: () => void;
+    onOpenTemplates: () => void;
+    onOpenAnalytics: () => void;
 }
 
-export default function Sidebar({ open, onClose, engineReady, onEngineReady }: Props) {
+export default function Sidebar({ open, onClose, engineReady, onEngineReady, onOpenTimeline, onOpenAnomalies, onOpenEvidenceGraph, onOpenTemplates, onOpenAnalytics }: Props) {
     const [docs, setDocs] = useState<DocFile[]>([]);
     const [uploading, setUploading] = useState(false);
     const [ingesting, setIngesting] = useState(false);
@@ -155,8 +165,8 @@ export default function Sidebar({ open, onClose, engineReady, onEngineReady }: P
                             onDrop={onDrop}
                             onClick={() => fileInputRef.current?.click()}
                             className={`cursor-pointer rounded-xl border-2 border-dashed p-4 text-center transition-colors ${dragOver
-                                    ? "border-brand-500 bg-brand-600/10"
-                                    : "border-[var(--border)] hover:border-brand-500/50 hover:bg-[var(--card-hover)]"
+                                ? "border-brand-500 bg-brand-600/10"
+                                : "border-[var(--border)] hover:border-brand-500/50 hover:bg-[var(--card-hover)]"
                                 }`}
                         >
                             {uploading ? (
@@ -214,19 +224,85 @@ export default function Sidebar({ open, onClose, engineReady, onEngineReady }: P
                     {statusMsg && (
                         <div
                             className={`flex items-start gap-2 px-3 py-2 rounded-lg text-xs ${statusMsg.ok
-                                    ? "bg-green-900/30 text-green-400"
-                                    : "bg-red-900/30 text-red-400"
+                                ? "bg-green-900/30 text-green-400"
+                                : "bg-red-900/30 text-red-400"
                                 }`}
                         >
                             {statusMsg.ok ? <CheckCircle2 size={14} className="shrink-0 mt-0.5" /> : <AlertCircle size={14} className="shrink-0 mt-0.5" />}
                             <span>{statusMsg.text}</span>
                         </div>
                     )}
+
+                    {/* Separator */}
+                    <div className="border-t border-[var(--border)]" />
+
+                    {/* Analysis Tools */}
+                    <p className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">
+                        Analysis Tools
+                    </p>
+
+                    <button
+                        onClick={onOpenTimeline}
+                        disabled={!engineReady}
+                        className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl bg-[var(--background)] hover:bg-brand-600/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-sm"
+                    >
+                        <Clock size={16} className="text-brand-400 shrink-0" />
+                        <div className="text-left">
+                            <p className="font-medium">Extract Timeline</p>
+                            <p className="text-[10px] text-[var(--muted)]">Chronological events</p>
+                        </div>
+                    </button>
+
+                    <button
+                        onClick={onOpenAnomalies}
+                        disabled={!engineReady}
+                        className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl bg-[var(--background)] hover:bg-yellow-600/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-sm"
+                    >
+                        <ShieldAlert size={16} className="text-yellow-400 shrink-0" />
+                        <div className="text-left">
+                            <p className="font-medium">Detect Anomalies</p>
+                            <p className="text-[10px] text-[var(--muted)]">Smart alerts & patterns</p>
+                        </div>
+                    </button>
+
+                    <button
+                        onClick={onOpenEvidenceGraph}
+                        disabled={!engineReady}
+                        className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl bg-[var(--background)] hover:bg-green-600/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-sm"
+                    >
+                        <Network size={16} className="text-green-400 shrink-0" />
+                        <div className="text-left">
+                            <p className="font-medium">Show Forensic Linking</p>
+                            <p className="text-[10px] text-[var(--muted)]">Evidence graph visualization</p>
+                        </div>
+                    </button>
+
+                    <button
+                        onClick={onOpenTemplates}
+                        className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl bg-[var(--background)] hover:bg-purple-600/10 transition-colors text-sm"
+                    >
+                        <FileCode2 size={16} className="text-purple-400 shrink-0" />
+                        <div className="text-left">
+                            <p className="font-medium">Prompt Templates</p>
+                            <p className="text-[10px] text-[var(--muted)]">Custom & pre-defined prompts</p>
+                        </div>
+                    </button>
+
+                    <button
+                        onClick={onOpenAnalytics}
+                        className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl bg-[var(--background)] hover:bg-brand-600/10 transition-colors text-sm"
+                    >
+                        <BarChart3 size={16} className="text-brand-400 shrink-0" />
+                        <div className="text-left">
+                            <p className="font-medium">Analytics</p>
+                            <p className="text-[10px] text-[var(--muted)]">Usage & RAG quality</p>
+                        </div>
+                    </button>
                 </div>
 
                 {/* Footer */}
                 <div className="px-4 py-3 border-t border-[var(--border)] text-[10px] text-[var(--muted)] text-center">
-                    NeuraVault v2.0 — 100 % offline
+                    NeuraVault v2.1 — 100 % offline
                 </div>
             </aside>
         </>

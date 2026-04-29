@@ -1,19 +1,51 @@
 "use client";
 
-import { useAuth } from "@/components/AuthContext";
+import { useState, useEffect } from "react";
 import ChatWindow from "@/components/ChatWindow";
-import LoginPage from "@/components/LoginPage";
+import AuthScreen from "@/components/AuthScreen";
+import { getToken, getStoredUser, logout, type AuthUser } from "@/lib/api";
 
 export default function Home() {
-    const { authenticated } = useAuth();
+    const [user, setUser] = useState<AuthUser | null>(null);
+    const [checking, setChecking] = useState(true);
 
-    if (!authenticated) {
-        return <LoginPage />;
+    useEffect(() => {
+        // Check for existing token on mount
+        const token = getToken();
+        const stored = getStoredUser();
+        if (token && stored) {
+            setUser(stored);
+        }
+        setChecking(false);
+
+        // Listen for 401 events (token expired)
+        const handleUnauth = () => {
+            setUser(null);
+        };
+        window.addEventListener("neuravault:unauthorized", handleUnauth);
+        return () => window.removeEventListener("neuravault:unauthorized", handleUnauth);
+    }, []);
+
+    const handleLogout = () => {
+        logout();
+        setUser(null);
+    };
+
+    if (checking) {
+        return (
+            <main className="flex h-screen items-center justify-center">
+                <div className="animate-pulse text-[var(--muted)]">Loading…</div>
+            </main>
+        );
+    }
+
+    if (!user) {
+        return <AuthScreen onAuthenticated={setUser} />;
     }
 
     return (
         <main className="flex h-screen">
-            <ChatWindow />
+            <ChatWindow user={user} onLogout={handleLogout} />
         </main>
     );
 }

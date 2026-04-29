@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { AuthProvider } from "@/components/AuthContext";
 
 export const metadata: Metadata = {
     title: "NeuraVault — Privacy-First RAG",
@@ -16,7 +15,7 @@ export default function RootLayout({
     return (
         <html lang="en" className="dark">
             <body className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
-                <AuthProvider>{children}</AuthProvider>
+                {children}
             </body>
         </html>
     );
